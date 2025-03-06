@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Artistas das Músicas Salvas no Spotify</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #181818;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+        h1 {
+            color: #1DB954;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .login-section, .result-section {
+            margin-bottom: 30px;
+        }
+        button {
+            background-color: #1DB954;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 30px;
+            font-weight: bold;
+            cursor: pointer;
+            display: block;
+            margin: 20px auto;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #1ed760;
+        }
+        #artist-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .artist-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            margin-bottom: 10px;
+            background-color: #282828;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+        .artist-item:hover {
+            background-color: #333333;
+        }
+        .artist-image {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            margin-right: 15px;
+            object-fit: cover;
+        }
+        .artist-info {
+            flex-grow: 1;
+        }
+        .artist-name {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .track-count {
+            font-size: 14px;
+            color: #b3b3b3;
+        }
+        .count-badge {
+            background-color: #1DB954;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14px;
+            min-width: 30px;
+            text-align: center;
+        }
+        .loading {
+            text-align: center;
+            color: #b3b3b3;
+            font-style: italic;
+        }
+        .status {
+            text-align: center;
+            color: #b3b3b3;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Artistas das Músicas Salvas no Spotify</h1>
+        
+        <div class="login-section" id="login-section">
+            <p>Conecte-se à sua conta do Spotify para ver quais artistas estão mais presentes na sua biblioteca de músicas salvas.</p>
+            <button id="login-button">Conectar ao Spotify</button>
+        </div>
+        
+        <div class="result-section" id="result-section" style="display: none;">
+            <div class="status" id="status">Carregando suas músicas salvas...</div>
+            <div id="loading" class="loading">Carregando...</div>
+            <ul id="artist-list"></ul>
+        </div>
+    </div>
+
+    <script>
+        // Configuração
+        const clientId = 'cdbe0b644b984a6e98839e352d87bb3d';
+        const redirectUri = window.location.origin + window.location.pathname;
+        
+        // Escopo necessário para ler as músicas salvas
+        const scope = 'user-library-read';
+        
+        // Elementos do DOM
+        const loginSection = document.getElementById('login-section');
+        const resultSection = document.getElementById('result-section');
+        const loginButton = document.getElementById('login-button');
+        const artistList = document.getElementById('artist-list');
+        const loadingElement = document.getElementById('loading');
+        const statusElement = document.getElementById('status');
+        
+        // Evento de login
+        loginButton.addEventListener('click', () => {
+            // Redirecionar para autorização do Spotify
+            const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
+            window.location.href = authUrl;
+        });
+        
+        // Verificar se temos um token na URL (após o redirecionamento)
+        function getHashParams() {
+            const hashParams = {};
+            const hash = window.location.hash.substring(1);
+            const params = hash.split('&');
+            
+            for (let i = 0; i < params.length; i++) {
+                const pair = params[i].split('=');
+                hashParams[pair[0]] = decodeURIComponent(pair[1]);
+            }
+            
+            return hashParams;
+        }
+        
+        const params = getHashParams();
+        const accessToken = params.access_token;
+        
+        if (accessToken) {
+            // Mostrar seção de resultados e esconder login
+            loginSection.style.display = 'none';
+            resultSection.style.display = 'block';
+            
+            // Obter todas as músicas salvas
+            fetchAllSavedTracks(accessToken);
+        }
+        
+        // Função para obter todas as músicas salvas (com paginação)
+        async function fetchAllSavedTracks(token) {
+            const allTracks = [];
+            let url = 'https://api.spotify.com/v1/me/tracks?limit=50';
+            
+            try {
+                while (url) {
+                    statusElement.textContent = `Carregando músicas (${allTracks.length} até agora)...`;
+                    
+                    const response = await fetch(url, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`Erro na API do Spotify: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    allTracks.push(...data.items);
+                    
+                    // Verificar se há mais páginas
+                    url = data.next;
+                }
+                
+                // Processar e exibir os artistas
+                processArtists(allTracks);
+                
+            } catch (error) {
+                loadingElement.textContent = `Erro: ${error.message}`;
+                console.error('Erro ao buscar músicas:', error);
+            }
+        }
+        
+        // Processar artistas e contar ocorrências
+        function processArtists(tracks) {
+            statusElement.textContent = `Processando ${tracks.length} músicas...`;
+            
+            // Objeto para contar artistas
+            const artistCounts = {};
+            const artistInfo = {};
+            
+            // Contar ocorrências de cada artista
+            tracks.forEach(item => {
+                item.track.artists.forEach(artist => {
+                    if (artistCounts[artist.id]) {
+                        artistCounts[artist.id]++;
+                    } else {
+                        artistCounts[artist.id] = 1;
+                        artistInfo[artist.id] = {
+                            name: artist.name,
+                            id: artist.id,
+                            // Armazenar para buscar imagens depois
+                            url: artist.href
+                        };
+                    }
+                });
+            });
+            
+            // Converter para array e ordenar
+            const sortedArtists = Object.keys(artistCounts)
+                .map(id => ({
+                    id,
+                    name: artistInfo[id].name,
+                    url: artistInfo[id].url,
+                    count: artistCounts[id]
+                }))
+                .sort((a, b) => b.count - a.count);
+            
+            // Atualizar status
+            statusElement.textContent = `Encontrados ${sortedArtists.length} artistas em ${tracks.length} músicas salvas`;
+            
+            // Buscar imagens dos top artistas (limitando para evitar muitas requisições)
+            fetchArtistImages(sortedArtists.slice(0, 50), accessToken);
+        }
+        
+        // Buscar imagens dos artistas
+        async function fetchArtistImages(artists, token) {
+            loadingElement.textContent = 'Obtendo informações dos artistas...';
+            
+            // Fazer chamadas em lotes para evitar muitas requisições simultâneas
+            const batchSize = 10;
+            const artistsWithImages = [];
+            
+            for (let i = 0; i < artists.length; i += batchSize) {
+                const batch = artists.slice(i, i + batchSize);
+                const promises = batch.map(artist => 
+                    fetch(`https://api.spotify.com/v1/artists/${artist.id}`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        return {
+                            ...artist,
+                            image: data.images && data.images.length > 0 ? data.images[0].url : null
+                        };
+                    })
+                    .catch(error => {
+                        console.error(`Erro ao buscar informações do artista ${artist.name}:`, error);
+                        return {
+                            ...artist,
+                            image: null
+                        };
+                    })
+                );
+                
+                const results = await Promise.all(promises);
+                artistsWithImages.push(...results);
+                
+                loadingElement.textContent = `Obtendo informações dos artistas (${artistsWithImages.length}/${artists.length})...`;
+            }
+            
+            // Exibir resultados
+            displayArtists(artistsWithImages);
+        }
+        
+        // Exibir a lista de artistas
+        function displayArtists(artists) {
+            loadingElement.style.display = 'none';
+            
+            artists.forEach(artist => {
+                const listItem = document.createElement('li');
+                listItem.className = 'artist-item';
+                
+                // Criar elemento de imagem
+                const imageElement = document.createElement('img');
+                imageElement.className = 'artist-image';
+                imageElement.src = artist.image || 'https://via.placeholder.com/60';
+                imageElement.alt = artist.name;
+                listItem.appendChild(imageElement);
+                
+                // Informações do artista
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'artist-info';
+                
+                const nameElement = document.createElement('div');
+                nameElement.className = 'artist-name';
+                nameElement.textContent = artist.name;
+                infoDiv.appendChild(nameElement);
+                
+                const countText = document.createElement('div');
+                countText.className = 'track-count';
+                countText.textContent = artist.count === 1 
+                    ? '1 música salva' 
+                    : `${artist.count} músicas salvas`;
+                infoDiv.appendChild(countText);
+                
+                listItem.appendChild(infoDiv);
+                
+                // Badge com o número
+                const countBadge = document.createElement('div');
+                countBadge.className = 'count-badge';
+                countBadge.textContent = artist.count;
+                listItem.appendChild(countBadge);
+                
+                artistList.appendChild(listItem);
+            });
+        }
+    </script>
+</body>
+</html>
