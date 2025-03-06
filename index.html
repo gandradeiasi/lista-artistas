@@ -59,13 +59,6 @@
         .artist-item:hover {
             background-color: #333333;
         }
-        .artist-image {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            margin-right: 15px;
-            object-fit: cover;
-        }
         .artist-info {
             flex-grow: 1;
         }
@@ -217,9 +210,7 @@
                         artistCounts[artist.id] = 1;
                         artistInfo[artist.id] = {
                             name: artist.name,
-                            id: artist.id,
-                            // Armazenar para buscar imagens depois
-                            url: artist.href
+                            id: artist.id
                         };
                     }
                 });
@@ -230,58 +221,13 @@
                 .map(id => ({
                     id,
                     name: artistInfo[id].name,
-                    url: artistInfo[id].url,
                     count: artistCounts[id]
                 }))
                 .sort((a, b) => b.count - a.count);
             
-            // Atualizar status
+            // Atualizar status e exibir resultados
             statusElement.textContent = `Encontrados ${sortedArtists.length} artistas em ${tracks.length} músicas salvas`;
-            
-            // Buscar imagens dos top artistas (limitando para evitar muitas requisições)
-            fetchArtistImages(sortedArtists.slice(0, 50), accessToken);
-        }
-        
-        // Buscar imagens dos artistas
-        async function fetchArtistImages(artists, token) {
-            loadingElement.textContent = 'Obtendo informações dos artistas...';
-            
-            // Fazer chamadas em lotes para evitar muitas requisições simultâneas
-            const batchSize = 10;
-            const artistsWithImages = [];
-            
-            for (let i = 0; i < artists.length; i += batchSize) {
-                const batch = artists.slice(i, i + batchSize);
-                const promises = batch.map(artist => 
-                    fetch(`https://api.spotify.com/v1/artists/${artist.id}`, {
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        return {
-                            ...artist,
-                            image: data.images && data.images.length > 0 ? data.images[0].url : null
-                        };
-                    })
-                    .catch(error => {
-                        console.error(`Erro ao buscar informações do artista ${artist.name}:`, error);
-                        return {
-                            ...artist,
-                            image: null
-                        };
-                    })
-                );
-                
-                const results = await Promise.all(promises);
-                artistsWithImages.push(...results);
-                
-                loadingElement.textContent = `Obtendo informações dos artistas (${artistsWithImages.length}/${artists.length})...`;
-            }
-            
-            // Exibir resultados
-            displayArtists(artistsWithImages);
+            displayArtists(sortedArtists);
         }
         
         // Exibir a lista de artistas
@@ -291,13 +237,6 @@
             artists.forEach(artist => {
                 const listItem = document.createElement('li');
                 listItem.className = 'artist-item';
-                
-                // Criar elemento de imagem
-                const imageElement = document.createElement('img');
-                imageElement.className = 'artist-image';
-                imageElement.src = artist.image || 'https://via.placeholder.com/60';
-                imageElement.alt = artist.name;
-                listItem.appendChild(imageElement);
                 
                 // Informações do artista
                 const infoDiv = document.createElement('div');
